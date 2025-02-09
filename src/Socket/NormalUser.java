@@ -89,6 +89,8 @@ public class NormalUser extends Thread {
             Socket clientSocket = new Socket();
             InetSocketAddress addr = new InetSocketAddress(IP, puertoSocket);
             clientSocket.connect(addr);
+            OutputStream os = clientSocket.getOutputStream();
+            os.write(nombre.getBytes());
             new Thread(() -> runEnviar(clientSocket)).start();
             new Thread(() -> runRecibir(clientSocket)).start();
 

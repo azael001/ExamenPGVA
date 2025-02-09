@@ -3,6 +3,8 @@ import Multicast.MultiCast;
 
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class UserWrite extends Thread {
@@ -17,6 +19,8 @@ public class UserWrite extends Thread {
     public static final int enviar = 1;
     public static final int recibirPrivado = 2;
     public static final int recibir = 3;
+    private static List<Socket> clientesConectados = new ArrayList<>();
+    private static List<String> nombresClientes = new ArrayList<>();
     public UserWrite(int tipoHilo) {
         this.tipoHilo = tipoHilo;
     }
@@ -79,8 +83,11 @@ public class UserWrite extends Thread {
             try {
                 mensaje = bufferedReader.readLine();
                 String mensajeFinal[]= mensaje.split(":");
-                if(mensaje.startsWith("Privado")){
-                    os.write((mensajeFinal[1]).getBytes());
+                if (mensaje.startsWith("Privado")) {
+                    // Llamar al método para enviar mensaje privado
+                    String nombreDestinatario = mensajeFinal[1];  // El nombre del destinatario
+                    String mensajePrivado = mensajeFinal[2];       // El mensaje a enviar
+                    enviarPrivado(nombreDestinatario, mensajePrivado);
                 }
                 else {
                     mensaje = nombre + ": " + mensaje;
@@ -134,6 +141,15 @@ public class UserWrite extends Thread {
         try {
             InputStream is = newSocket.getInputStream();
             OutputStream os = newSocket.getOutputStream();
+            byte[] nombreBuffer = new byte[1024];
+            is.read(nombreBuffer);
+            String nombreCliente = new String(nombreBuffer).trim();
+            // Agregar cliente y nombre a las listas
+            synchronized(clientesConectados) {
+                clientesConectados.add(newSocket);
+                nombresClientes.add(nombreCliente);
+            }
+            System.out.println("Cliente conectado: " + nombreCliente);
             while (true) {
                 byte[] mensaje = new byte[1024];
                 is.read(mensaje);
@@ -160,6 +176,26 @@ public class UserWrite extends Thread {
             newSocket.close();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+    private static void enviarPrivado(String nombreDestinatario, String mensaje) {
+        synchronized(clientesConectados) {
+            for (int i = 0; i < nombresClientes.size(); i++) {
+                if (nombresClientes.get(i).equalsIgnoreCase(nombreDestinatario)) {
+                    try {
+                        // Enviar mensaje al cliente correspondiente
+                        Socket destinatarioSocket = clientesConectados.get(i);
+                        OutputStream os = destinatarioSocket.getOutputStream();
+                        os.write(mensaje.getBytes());
+                        os.flush();
+                        System.out.println("Mensaje privado enviado a " + nombreDestinatario);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    return; // Terminar el bucle una vez enviado el mensaje
+                }
+            }
+            System.out.println("Cliente no encontrado: " + nombreDestinatario);
         }
     }
 
