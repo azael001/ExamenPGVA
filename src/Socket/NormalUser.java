@@ -1,5 +1,4 @@
 package Socket;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -8,6 +7,7 @@ import java.util.Scanner;
 public class NormalUser extends Thread {
     public static String direccionIPGrupo = "225.10.10.10";
     public static int puerto = 6998;
+    public static int puertoSocket=6668;
     public static MulticastSocket socketMulticast = null;
     public static InetSocketAddress grupo = null;
     public static NetworkInterface netIf = null;
@@ -16,22 +16,15 @@ public class NormalUser extends Thread {
     public int tipoHilo = -1;
     public static final int enviar = 1;
     public static final int recibir = 2;
-    public static final int recibirPrivadoNum = 3;
-    static Socket serverSocket;
-    static InetSocketAddress serverSocketAddress;
     static String IP = "localhost";
-
-
     public NormalUser(int tipoHilo) {
         this.tipoHilo = tipoHilo;
     }
-
     private static void pedirNombre() {
         Scanner name = new Scanner(System.in);
         System.out.print("Escribe tu nombre: ");
         nombre = name.nextLine();
     }
-
     public static void main(String[] args) {
         try {
             ejecucion = true;
@@ -42,14 +35,11 @@ public class NormalUser extends Thread {
             netIf = NetworkInterface.getByInetAddress(dir);
             socketMulticast.joinGroup(grupo, netIf);
 
-
             NormalUser enviarC = new NormalUser(enviar);
             NormalUser recibirC = new NormalUser(recibir);
 
-
             enviarC.start();
             recibirC.start();
-
 
             enviarC.join();
             recibirC.join();
@@ -71,46 +61,89 @@ public class NormalUser extends Thread {
     @Override
     public void run() {
         switch (tipoHilo) {
-            case enviar:
-                runEnviarPrivado();
+            case recibir:
+                runRecibirMulticast();
                 break;
-
+                case enviar:
+                    socket();
+                    break;
         }
     }
-
-
-
-    private void runEnviarPrivado() {
+    private void runRecibirMulticast() {
+        final int tamanoBufferMensaje = 1024;
+        String mensaje;
+        byte[] bufferMensajeRecibido = new byte[tamanoBufferMensaje];
+        while (ejecucion) {
+            try {
+                DatagramPacket paquete = new DatagramPacket(bufferMensajeRecibido, bufferMensajeRecibido.length);
+                socketMulticast.receive(paquete);
+                mensaje = new String(paquete.getData(), 0, paquete.getLength());
+                System.out.println(mensaje);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+    private void socket(){
         try {
             Socket clientSocket = new Socket();
-            InetSocketAddress addr = new InetSocketAddress("localhost", 6668);
-            //establece la conexión con el servidor en la dirección y puerto especificados.
+            InetSocketAddress addr = new InetSocketAddress(IP, puertoSocket);
             clientSocket.connect(addr);
+            new Thread(() -> runEnviar(clientSocket)).start();
+            new Thread(() -> runRecibir(clientSocket)).start();
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+    private void runEnviar(Socket clientSocket) {
+        try {
+            //establece la conexión con el servidor en la dirección y puerto especificados.
 
             //Obtiene el flujo de salida del socket para enviar datos al servidor.
             OutputStream os = clientSocket.getOutputStream();
             InputStream is = clientSocket.getInputStream();
+            byte[] mensajex = new byte[1024];
             Scanner scanner = new Scanner(System.in);
-            String mensajePrivado = "";
-            byte[] mensaje = new byte[1024];
+
+            String mensajeS = "";
             while (true) {
-                mensajePrivado = scanner.nextLine();
-                if (mensajePrivado.equals("fin")) {
-                    os.write(mensajePrivado.getBytes());
-                    is.read(mensaje);
-                    String smens = (new String(mensaje)).trim();
-                    System.out.println(smens);
+                mensajeS = scanner.nextLine();
+                String mensaje[] = mensajeS.split(":");
+                if (mensajeS.equals("fin")) {
                     break;
-                } else {
-                    os.write(mensajePrivado.getBytes());
                 }
-                is.read(mensaje);
-                String smens = (new String(mensaje)).trim();
-                System.out.println(smens);
+                if (mensaje[0].equalsIgnoreCase("Privado")) {
+                    os.write(mensaje[1].getBytes());
+                    is.read(mensajex);
+                    String smens = (new String(mensajex)).trim();
+                    System.out.println(smens);
+                }
+                else{
+                    mensajeS = nombre + ":" + mensajeS;
+                    DatagramPacket paquete = new DatagramPacket(mensajeS.getBytes(), mensajeS.length(), grupo.getAddress(), puerto);
+                    socketMulticast.send(paquete);
+                }
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+    private void runRecibir(Socket clientSocket){
+        try {
+
+            InputStream is = clientSocket.getInputStream();
+            byte[] mensajex = new byte[1024];
+            while (true) {
+            is.read(mensajex);
+            String smens = (new String(mensajex)).trim();
+            System.out.println(smens);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
 
